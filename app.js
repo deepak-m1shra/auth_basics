@@ -7,7 +7,8 @@ const mongoose = require('mongoose')
 const session = require('express-session')
 const passport = require('passport')
 const passportLocalMongoose = require('passport-local-mongoose')
-
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const findOrCreate = require('mongoose-findorcreate')
 
 const app = express()
 
@@ -34,6 +35,7 @@ const userSchema = new mongoose.Schema({
 })
 
 userSchema.plugin(passportLocalMongoose)
+userSchema.plugin(findOrCreate)
 
 const User = new mongoose.model('User', userSchema)
 
@@ -42,9 +44,38 @@ passport.use(User.createStrategy())
 passport.serializeUser(User.serializeUser())
 passport.deserializeUser(User.deserializeUser())
 
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.CALLBACK_URL,
+    userProfileURL: 'https://www.googleapis.com/oauth2/v3/userinfo'
+
+},
+    function (accessToken, refreshToken, profile, cb) {
+        User.findOrCreate({ googleId: profile.id }, function (err, user) {
+            return cb(err, user);
+        });
+    }
+));
+
+console.log(process.env.GOOGLE_CLIENT_ID)
+console.log(process.env.GOOGLE_CLIENT_SECRET)
+console.log(process.env.CALLBACK_URL)
+
 app.get('/', (req, res) => {
     res.render("home")
 })
+
+app.get('/auth/google', function (req, res) {
+    passport.authenticate('google', { scope: ['profile'] })
+})
+
+app.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/login' }),
+    function (req, res) {
+        // Successful authentication, redirect home.
+        res.redirect('/');
+    });
 
 app.get('/login', (req, res) => {
     res.render("login")
